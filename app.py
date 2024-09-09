@@ -39,6 +39,9 @@ from langchain.prompts.chat import (
 # config files
 import config
 
+__import__('pysqlite3')
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
 
 show_pages(
     [
