@@ -284,43 +284,43 @@ with tab_chatgpt:
 
         return chain
 
-    try:
-        if st.session_state["api_key_check"]:
+    # try:
+    if st.session_state["api_key_check"]:
+        retriever = initialize_retriever(st.session_state["documents"])
+
+        chain = initialize_chain(retriever)
+
+        def generate_response(input_text):
+            result = chain(input_text)
+            return result['answer']
+
+        st.subheader('질문을 적어 주세요')
+
+        if "messages" not in st.session_state:
+            st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
+
+        for msg in st.session_state.messages:
+            st.chat_message(msg["role"]).write(msg["content"])
+
+        if prompt := st.chat_input():
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.chat_message("user").write(prompt)
+            msg =  generate_response(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+            st.chat_message("assistant").write(msg)
+
+        if st.button("초기화"):
             retriever = initialize_retriever(st.session_state["documents"])
-
             chain = initialize_chain(retriever)
-
-            def generate_response(input_text):
-                result = chain(input_text)
-                return result['answer']
-
-            st.subheader('질문을 적어 주세요')
-
-            if "messages" not in st.session_state:
-                st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
-
-            for msg in st.session_state.messages:
-                st.chat_message(msg["role"]).write(msg["content"])
-
-            if prompt := st.chat_input():
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                st.chat_message("user").write(prompt)
-                msg =  generate_response(prompt)
-                st.session_state.messages.append({"role": "assistant", "content": msg})
-                st.chat_message("assistant").write(msg)
-
-            if st.button("초기화"):
-                retriever = initialize_retriever(st.session_state["documents"])
-                chain = initialize_chain(retriever)
-                st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
-                st.write("대화가 초기화되었습니다.")
-                st.write(st.session_state["documents"])
+            st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
+            st.write("대화가 초기화되었습니다.")
+            st.write(st.session_state["documents"])
 
         # else:
         #     st.warning("Please enter a valid OpenAI API Key")
 
 
-    except:
-        st.warning("Please enter a valid OpenAI API Key")
+    # except:
+    #     st.warning("Please enter a valid OpenAI API Key")
 
     
