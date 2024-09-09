@@ -49,9 +49,10 @@ show_pages(
 add_page_title(layout='wide')
 
 
-
 if "res_df" not in st.session_state:
     st.session_state.res_df = pd.DataFrame()
+
+os.environ["OPENAI_API_KEY"] = ""
 
 # 탭 리스트
 tab_search_document, tab_search_result, tab_chatgpt = st.tabs(['ADAMS 문서 검색', '검색 결과 확인', 'ChatGPT_TEST'])
@@ -211,7 +212,6 @@ with tab_chatgpt:
     with st.form('search result dataframe'):
         openai_api_key = st.text_input("OpenAI API Key", key="chatbot_api_key", type="password")
         os.environ["OPENAI_API_KEY"] = openai_api_key
-        st.session_state["api_key_check"] = True
 
         res_column_config_gpt = {
             'URI' : st.column_config.LinkColumn('URI', display_text='LINK')
@@ -227,6 +227,8 @@ with tab_chatgpt:
         check_gpt_button = st.form_submit_button('Checked File to GPT')
 
         if check_gpt_button:
+            st.session_state["api_key_check"] = True
+
             with st.spinner('GPT requsting...'):
                 if not openai_api_key:
                     st.info("Please add your OpenAI API key to continue.")
@@ -282,40 +284,43 @@ with tab_chatgpt:
 
         return chain
 
-    try:
-        if st.session_state["api_key_check"]:
+    # try:
+    if st.session_state["api_key_check"]:
+        retriever = initialize_retriever(st.session_state["documents"])
+
+        chain = initialize_chain(retriever)
+
+        def generate_response(input_text):
+            result = chain(input_text)
+            return result['answer']
+
+        st.subheader('질문을 적어 주세요')
+
+        if "messages" not in st.session_state:
+            st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
+
+        for msg in st.session_state.messages:
+            st.chat_message(msg["role"]).write(msg["content"])
+
+        if prompt := st.chat_input():
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            st.chat_message("user").write(prompt)
+            msg =  generate_response(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+            st.chat_message("assistant").write(msg)
+
+        if st.button("초기화"):
             retriever = initialize_retriever(st.session_state["documents"])
-
             chain = initialize_chain(retriever)
+            st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
+            st.write("대화가 초기화되었습니다.")
+            st.write(st.session_state["documents"])
 
-            def generate_response(input_text):
-                result = chain(input_text)
-                return result['answer']
-
-            st.subheader('질문을 적어 주세요')
-
-            if "messages" not in st.session_state:
-                st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
-
-            for msg in st.session_state.messages:
-                st.chat_message(msg["role"]).write(msg["content"])
-
-            if prompt := st.chat_input():
-                st.session_state.messages.append({"role": "user", "content": prompt})
-                st.chat_message("user").write(prompt)
-                msg =  generate_response(prompt)
-                st.session_state.messages.append({"role": "assistant", "content": msg})
-                st.chat_message("assistant").write(msg)
-
-            if st.button("초기화"):
-                retriever = initialize_retriever(st.session_state["documents"])
-                chain = initialize_chain(retriever)
-                st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
-                st.write("대화가 초기화되었습니다.")
-                st.write(st.session_state["documents"])
-
-
-    except:
+    else:
         st.warning("Please enter a valid OpenAI API Key")
+
+
+    # except ValidationError:
+        # st.warning("Please enter a valid OpenAI API Key")
 
     
