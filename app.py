@@ -187,7 +187,7 @@ with tab_search_result:
                                         )
         
         
-        check_pdf_download = st.form_submit_button('Checked File Download')
+        check_pdf_download = st.form_submit_button('Checked File Download', disabled=True)
 
 
         if check_pdf_download:
