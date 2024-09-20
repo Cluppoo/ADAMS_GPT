@@ -81,9 +81,9 @@ with tab_search_document:
 
     search_cols1, search_cols2 = st.columns(2)
     with search_cols1:
-        search_keyword = st.text_input('본문 내용 검색')
-    with search_cols2:
         search_title = st.text_input('문서 제목 검색', key='text', on_change=title_property)
+    with search_cols2:
+        search_keyword = st.text_input('본문 내용 검색')
 
     search_title_property = st.session_state["title_input"]
     
@@ -275,7 +275,7 @@ with tab_chatgpt:
 
         prompt = ChatPromptTemplate.from_messages(messages)
         chain_type_kwargs = {"prompt": prompt}
-        llm = ChatOpenAI(model_name="gpt-3.5-turbo", temperature=0)
+        llm = ChatOpenAI(model_name="gpt-4-0613", temperature=0)
 
         chain = RetrievalQAWithSourcesChain.from_chain_type(
             llm=llm,
