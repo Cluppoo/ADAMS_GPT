@@ -200,8 +200,6 @@ with tab_chatgpt:
     if st.session_state["api_key_check"]:
         retriever = adams_function.initialize_retriever(st.session_state["documents"])
         documents_in_store = retriever.vectorstore._collection.get()['documents']
-        st.write(len(documents_in_store))
-        st.write(documents_in_store[1][:100])
         chain = adams_function.initialize_chain(retriever)
 
         def generate_response(input_text):
