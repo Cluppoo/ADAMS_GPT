@@ -41,6 +41,7 @@ from langchain.prompts.chat import (
 
 # config files
 import config
+import adams_function
 
 
 show_pages(
@@ -58,7 +59,7 @@ if "res_df" not in st.session_state:
 os.environ["OPENAI_API_KEY"] = ""
 
 # 탭 리스트
-tab_search_document, tab_search_result, tab_chatgpt = st.tabs(['ADAMS 문서 검색', '검색 결과 확인', 'ChatGPT_TEST'])
+tab_search_document, tab_chatgpt = st.tabs(['ADAMS 문서 검색', 'ChatGPT 문서 대화'])
 
 with tab_search_document:
     st.header('ADAMS 문서 검색')
@@ -140,70 +141,6 @@ with tab_search_document:
                 except ValueError:
                     st.text('No Search Result')
                     st.session_state.res_df = pd.DataFrame(columns=doc_columns)
-
-
-
-with tab_search_result:
-
-    def pdf_download(url, title):
-            os.makedirs('./downloads/', exist_ok=True)
-            response = wget.download(url, f'./downloads/{title}.pdf')
-
-            return None
-    
-    def convert_link(old_link):
-        # 입력 url 파싱
-        parsed_url = urllib.parse.urlparse(old_link)
-        query_params = urllib.parse.parse_qs(parsed_url.query)
-        
-        # document ID 추출
-        ids_param = query_params.get('ids', [None])[0]
-        doc_title = query_params.get('docTitle', [None])[0]
-        if ids_param and doc_title:
-            ids_json = json.loads(ids_param)
-            document_id = ids_json[0]['documentId']['properties']['$id']
-            
-            # 새로운 url 작성
-            new_link = (
-                "https://adams.nrc.gov/wba/download?ids=%5B%7B%22documentId%22%3A%7B%22dataProviderId%22%3A"
-                "%22ves_repository%22%2C%22compound%22%3Afalse%2C%22properties%22%3A%7B%22%24repository_id"
-                "%22%3A%22CE1%22%2C%22%24id%22%3A%22{}%22%7D%7D%7D%5D&docTitle={}&action=view"
-                "&mimeType=application%2Fpdf&actionId=view"
-            ).format(document_id, urllib.parse.quote(doc_title))
-            
-            return new_link
-        else:
-            return None
-
-    with st.form('search result'):
-
-        res_column_config = {
-            'URI' : st.column_config.LinkColumn('URI', display_text='LINK')
-        }
-
-        search_result_df = st.dataframe(st.session_state.res_df,
-                                        column_config=res_column_config,
-                                        use_container_width=True,
-                                        hide_index=True,
-                                        on_select='rerun',
-                                        selection_mode='multi-row'
-                                        )
-        
-        
-        check_pdf_download = st.form_submit_button('Checked File Download')
-
-
-        if check_pdf_download:
-            with st.spinner('Downloading Files...'):
-                select_index_li = search_result_df.selection['rows']
-                if len(select_index_li) != 0:
-                    for i in select_index_li:
-                        select_row = st.session_state.res_df.iloc[i]
-                        pdf_download(url=convert_link(select_row['URI']),
-                                    title=select_row['DocumentTitle'])
-                    st.text('File Downloads Done')
-                else:
-                    st.text('No Checked Rows')
         
 with tab_chatgpt:
     if "api_key_check" not in st.session_state:
@@ -238,91 +175,64 @@ with tab_chatgpt:
                     st.stop()
 
                 selected_index_gpt = search_res_df_gpt.selection['rows'][0]
-                selected_url_gpt = convert_link(st.session_state.res_df.iloc[selected_index_gpt]['URI'])
+                selected_url_gpt = adams_function.convert_link(st.session_state.res_df.iloc[selected_index_gpt]['URI'])
+                st.write('selected document : {}'.format(st.session_state.res_df.iloc[selected_index_gpt]['DocumentTitle']))
 
                 loader = PyPDFLoader(selected_url_gpt)
                 documents = loader.load()
+                if "documents" in st.session_state:
+                    del st.session_state["documents"]
 
                 st.session_state["documents"] = documents
 
                 st.text('Document to GPT Done.')
+                if "messages" in st.session_state:
+                    del st.session_state["messages"]
 
+                try:
+                    del retriever
+                    del chain
+                except:
+                    pass
 
-    def initialize_retriever(documents):
-        text_splitter = CharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
-        texts = text_splitter.split_documents(documents)
-        embeddings = OpenAIEmbeddings()
-        vector_store = Chroma.from_documents(texts, embeddings)
-        retriever = vector_store.as_retriever(search_kwargs={"k": 2})
-        return retriever
-    
-    def initialize_chain(retriever):
-
-        system_template = """
-        You are an assistant that helps users extract and understand information from PDF documents. Your job is to read the PDF file and provide accurate and concise answers based on its contents, specifically the documents provided to you. When a user asks about a specific section or page, find the relevant information in the documents and respond accordingly.
-
-        Here are the rules for your role:
-        1. Only respond using the information from the provided PDF documents. Do not provide external information.
-        2. If a question is unclear, ask for more details to ensure a precise answer.
-        3. Keep your answers concise and to the point. If the information is too long, provide a summary.
-        4. If the answer cannot be found in the PDF documents, let the user know.
-        5. Be polite and helpful in all interactions with the user.
-
-        Documents: {documents}
-        Now, begin answering the user's questions based on the PDF document.
-        """
-
-        messages = [
-            SystemMessagePromptTemplate.from_template(system_template),
-            HumanMessagePromptTemplate.from_template("{question}")
-        ]
-
-        prompt = ChatPromptTemplate.from_messages(messages)
-        chain_type_kwargs = {"prompt": prompt,
-                             "document_variable_name": "documents"}
-        llm = ChatOpenAI(model_name="gpt-4-0613", temperature=0)
-
-        chain = RetrievalQAWithSourcesChain.from_chain_type(
-            llm=llm,
-            chain_type="stuff",
-            retriever=retriever,
-            return_source_documents=True,
-            chain_type_kwargs=chain_type_kwargs
-        )
-
-        return chain
 
     # try:
     if st.session_state["api_key_check"]:
-        retriever = initialize_retriever(st.session_state["documents"])
-
-        chain = initialize_chain(retriever)
+        retriever = adams_function.initialize_retriever(st.session_state["documents"])
+        documents_in_store = retriever.vectorstore._collection.get()['documents']
+        st.write(len(documents_in_store))
+        st.write(documents_in_store[1][:100])
+        chain = adams_function.initialize_chain(retriever)
 
         def generate_response(input_text):
             result = chain(input_text)
             return result['answer']
 
-        st.subheader('질문을 적어 주세요')
+        st.subheader('Chat With GPT')
+
+        prompt = st.chat_input()
 
         if "messages" not in st.session_state:
             st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
 
-        for msg in st.session_state.messages:
+        if prompt:
+            st.session_state.messages.append({"role": "user", "content": prompt})
+            # st.chat_message("user").write(prompt)
+            
+            msg = generate_response(prompt)
+            st.session_state.messages.append({"role": "assistant", "content": msg})
+            # st.chat_message("assistant").write(msg)
+
+
+        for msg in reversed(st.session_state.messages):
             st.chat_message(msg["role"]).write(msg["content"])
 
-        if prompt := st.chat_input():
-            st.session_state.messages.append({"role": "user", "content": prompt})
-            st.chat_message("user").write(prompt)
-            msg =  generate_response(prompt)
-            st.session_state.messages.append({"role": "assistant", "content": msg})
-            st.chat_message("assistant").write(msg)
-
-        if st.button("초기화"):
-            retriever = initialize_retriever(st.session_state["documents"])
-            chain = initialize_chain(retriever)
-            st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
-            st.write("대화가 초기화되었습니다.")
-            st.write(st.session_state["documents"])
+        # if st.button("초기화"):
+        #     retriever = initialize_retriever(st.session_state["documents"])
+        #     chain = initialize_chain(retriever)
+        #     st.session_state["messages"] = [{"role": "assistant", "content": "질문을 적어 주세요 무엇을 도와 드릴까요?"}]
+        #     st.write("대화가 초기화되었습니다.")
+        #     st.write(st.session_state["documents"])
 
         # else:
         #     st.warning("Please enter a valid OpenAI API Key")
